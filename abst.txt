@@ -1,23 +1,45 @@
 プロジェクト名: Claude-Like CLI Tool
-バージョン: v1.0
+バージョン: v1.1
 作成日: 2026-02-28
+更新日: 2026-02-28
 
 ## 概要
 ターミナル上で動作する Python 製 AI エージェント。
 Claude Code に着想を得たコーディング補助 + Office ファイル編集統合ツール。
 
+## ディレクトリ構成
+```
+toy2/
+├── main.py          # エントリーポイント（実行ファイル）
+├── coreprompt.md    # エージェントのシステムプロンプト（直接編集可）
+├── .env             # API キー・設定（AI_DIR で配置先を変更可）
+├── .env.example     # 設定サンプル
+├── requirements.txt
+├── run.sh
+└── .myagent/        # AI_DIR（.env の AI_DIR で変更可能）
+    ├── agent/       # エージェントコア
+    ├── llm/         # LLM クライアント
+    ├── tools/       # ツール群
+    ├── config/      # 設定管理
+    └── utils/       # ユーティリティ
+```
+
 ## 主な特徴
 - LLM バックエンド: OpenRouter / Azure OpenAI を .env で切り替え可能
+- AI_DIR 設定: .env の AI_DIR でモジュール配置先を変更可能（デフォルト: .myagent）
 - 外部フレームワーク不使用: 標準ライブラリ + 必要最小限のパッケージのみ
 - Function Calling: ファイル操作・シェル実行・Python 実行・Office ファイル操作
 - エージェントループ: ツール呼び出しが不要になるまで自動でループ
 - 最大ループ数制限: .env の MAX_AGENT_LOOPS で設定可能
+- coreprompt.md: ルート直下のファイルでシステムプロンプトを管理
+- ファイル書き込み制限: AI がツール経由で書けるのは AI_DIR 以内のみ
 - 会話履歴管理: トークン上限に収まるよう自動トリミング
 - ストリーミング出力: LLM の応答をリアルタイム表示
 
 ## 対応ツール
 - ファイル操作: read_file / write_file / edit_file / list_directory / search_files
-- シェル実行: run_shell
+  ※ 書き込みは AI_DIR 以下に制限
+- シェル実行: run_shell（WORKSPACE_DIR = AI_DIR）
 - Python 実行: run_python (サンドボックス)
 - PPTX: pptx_read / pptx_edit_slide / pptx_add_slide
 - DOCX: docx_read / docx_edit

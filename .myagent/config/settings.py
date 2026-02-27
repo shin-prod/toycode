@@ -12,6 +12,9 @@ class Settings:
     def __init__(self) -> None:
         self._load_dotenv(".env")
 
+        # AI ディレクトリ（モジュールの配置先・書き込み制限の基準）
+        self.ai_dir: str = os.path.abspath(os.getenv("AI_DIR", ".myagent"))
+
         # LLM プロバイダー
         self.provider: str = os.getenv("LLM_PROVIDER", "openrouter")
 
@@ -50,8 +53,9 @@ class Settings:
         self.allow_code_exec: bool = (
             os.getenv("ALLOW_CODE_EXEC", "true").lower() == "true"
         )
+        # WORKSPACE_DIR のデフォルトは AI_DIR（.myagent/）
         self.workspace_dir: str = os.path.abspath(
-            os.getenv("WORKSPACE_DIR", ".")
+            os.getenv("WORKSPACE_DIR", self.ai_dir)
         )
 
         # ログ設定

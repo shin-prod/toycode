@@ -1,15 +1,72 @@
 """Claude-Like CLI Tool エントリーポイント。
 
-REPL ループを提供し、ユーザー入力を受け取ってエージェントに渡す。
+起動順序:
+  1. .env を手動パースして AI_DIR を確認
+  2. AI_DIR を sys.path に追加
+  3. coreprompt.md を読み込む
+  4. LLM クライアント・ツールレジストリ・エージェントを初期化
+  5. REPL ループ開始
 """
 
+import os
 import sys
 
-from config import settings
-from llm import get_client
-from tools import build_registry
-from agent import Agent
-from utils.logger import get_logger
+
+# ------------------------------------------------------------------
+# ブートストラップ: .env から AI_DIR を読み取り sys.path に追加
+# ------------------------------------------------------------------
+
+def _bootstrap_ai_dir() -> str:
+    """AI_DIR を .env から解決し、モジュール検索パスに追加する。
+
+    .env が存在しない場合や AI_DIR が未定義の場合は '.myagent' を使用する。
+
+    Returns:
+        解決済みの AI ディレクトリ絶対パス
+    """
+    env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+    ai_dir_rel = ".myagent"  # デフォルト値
+
+    if os.path.exists(env_path):
+        with open(env_path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, _, val = line.partition("=")
+                if key.strip() == "AI_DIR":
+                    ai_dir_rel = val.strip().strip('"').strip("'")
+                    break
+
+    base = os.path.dirname(os.path.abspath(__file__))
+    ai_dir = os.path.join(base, ai_dir_rel)
+
+    if not os.path.isdir(ai_dir):
+        print(
+            f"エラー: AI_DIR が存在しません: {ai_dir}\n"
+            f"  AI_DIR={ai_dir_rel} を確認してください。",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    if ai_dir not in sys.path:
+        sys.path.insert(0, ai_dir)
+
+    # プロジェクトルートも追加（.env 読み込み用）
+    if base not in sys.path:
+        sys.path.insert(1, base)
+
+    return ai_dir
+
+
+# AI_DIR をブートストラップしてから各モジュールを import
+_AI_DIR = _bootstrap_ai_dir()
+
+from config import settings  # noqa: E402  (sys.path 追加後に import)
+from llm import get_client  # noqa: E402
+from tools import build_registry  # noqa: E402
+from agent import Agent  # noqa: E402
+from utils.logger import get_logger  # noqa: E402
 
 logger = get_logger(__name__)
 
@@ -23,6 +80,27 @@ _BANNER = """
 ╚══════════════════════════════════════════════════════╝
 """
 
+_COREPROMPT_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "coreprompt.md"
+)
+
+
+def _load_coreprompt() -> str | None:
+    """coreprompt.md を読み込んでシステムプロンプトとして返す。
+
+    ファイルが存在しない場合は None を返す（Agent はデフォルトを使用）。
+
+    Returns:
+        coreprompt.md の内容、またはファイルがない場合は None
+    """
+    if not os.path.isfile(_COREPROMPT_PATH):
+        logger.warning("coreprompt.md が見つかりません: %s", _COREPROMPT_PATH)
+        return None
+    with open(_COREPROMPT_PATH, encoding="utf-8") as f:
+        content = f.read().strip()
+    logger.info("coreprompt.md を読み込みました (%d 文字)", len(content))
+    return content
+
 
 def print_banner() -> None:
     """バナーを表示する。"""
@@ -32,12 +110,13 @@ def print_banner() -> None:
         print(f"  モデル      : {settings.openrouter_model}")
     else:
         print(f"  デプロイ    : {settings.azure_deployment}")
+    print(f"  AI ディレクトリ: {settings.ai_dir}")
     print(f"  ストリーム  : {'有効' if settings.stream else '無効'}")
     print(f"  最大ループ  : {settings.max_agent_loops} 回")
     print()
 
 
-def handle_command(command: str, agent: Agent) -> bool:
+def handle_command(command: str, agent: "Agent") -> bool:
     """スラッシュコマンドを処理する。
 
     Args:
@@ -45,8 +124,7 @@ def handle_command(command: str, agent: Agent) -> bool:
         agent: 現在のエージェントインスタンス
 
     Returns:
-        True: REPL ループを継続
-        False: REPL ループを終了
+        True: REPL ループを継続 / False: REPL ループを終了
     """
     cmd = command.strip().lower()
 
@@ -77,14 +155,23 @@ def handle_command(command: str, agent: Agent) -> bool:
         print()
         return True
 
+    if cmd == "/reload":
+        # coreprompt.md をリロードしてシステムプロンプトを更新
+        new_prompt = _load_coreprompt()
+        if new_prompt:
+            agent.history.set_system(new_prompt)
+            print("coreprompt.md をリロードしました。")
+        else:
+            print("coreprompt.md が見つかりませんでした。")
+        return True
+
     print(f"不明なコマンド: {command}  (/help でヘルプを確認)")
     return True
 
 
 def main() -> None:
     """メイン関数。設定を読み込み、エージェントを初期化して REPL を開始する。"""
-    # 起動シーケンス
-    logger.info("起動開始: provider=%s", settings.provider)
+    logger.info("起動開始: provider=%s ai_dir=%s", settings.provider, settings.ai_dir)
 
     try:
         llm = get_client()
@@ -93,7 +180,8 @@ def main() -> None:
         sys.exit(1)
 
     registry = build_registry()
-    agent = Agent(llm, registry)
+    system_prompt = _load_coreprompt()
+    agent = Agent(llm, registry, system_prompt=system_prompt)
 
     print_banner()
     logger.info("エージェント初期化完了")
@@ -109,27 +197,21 @@ def main() -> None:
         if not user_input:
             continue
 
-        # スラッシュコマンド処理
         if user_input.startswith("/"):
-            should_continue = handle_command(user_input, agent)
-            if not should_continue:
+            if not handle_command(user_input, agent):
                 break
             continue
 
-        # エージェントに入力を渡す
         logger.debug("ユーザー入力: %s", user_input[:100])
         try:
             if not settings.stream:
-                # 非ストリーミング: run() 内で応答を取得してから表示
                 response = agent.run(user_input)
-                # ループ上限警告は赤色で表示
                 if response.startswith("⚠"):
                     print(f"\n\033[31m{response}\033[0m")
                 else:
                     print(f"\n{response}")
             else:
-                # ストリーミング: agent.run() 内でリアルタイム表示
-                print()  # 出力前に空行
+                print()
                 agent.run(user_input)
         except RuntimeError as e:
             print(f"\n\033[31mエラー: {e}\033[0m", file=sys.stderr)
