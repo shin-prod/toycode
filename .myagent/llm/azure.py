@@ -74,7 +74,7 @@ class AzureOpenAIClient(BaseLLMClient):
             self._settings.azure_deployment,
         )
         try:
-            with urllib.request.urlopen(req) as resp:
+            with urllib.request.urlopen(req, context=self._ssl_context()) as resp:
                 body = json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as e:
             error_body = e.read().decode("utf-8")

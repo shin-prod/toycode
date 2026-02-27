@@ -1,6 +1,7 @@
 """LLM クライアント基底クラスと共通データ型の定義。"""
 
 import json
+import ssl
 import urllib.error
 import urllib.request
 from abc import ABC, abstractmethod
@@ -67,6 +68,23 @@ class BaseLLMClient(ABC):
     # ------------------------------------------------------------------
 
     @staticmethod
+    def _ssl_context() -> ssl.SSLContext:
+        """certifi の CA バンドルを使った SSL コンテキストを返す。
+
+        macOS の python.org 版 Python は OS の証明書ストアを参照しないため、
+        certifi で明示的に CA を指定する必要がある。
+        certifi が利用できない場合はデフォルトコンテキストにフォールバックする。
+
+        Returns:
+            ssl.SSLContext
+        """
+        try:
+            import certifi
+            return ssl.create_default_context(cafile=certifi.where())
+        except ImportError:
+            return ssl.create_default_context()
+
+    @staticmethod
     def _parse_response_body(body: dict) -> LLMResponse:
         """OpenAI 互換レスポンス dict を LLMResponse に変換する共通処理。
 
@@ -121,7 +139,7 @@ class BaseLLMClient(ABC):
         finish_reason = "stop"
 
         try:
-            with urllib.request.urlopen(req) as resp:
+            with urllib.request.urlopen(req, context=BaseLLMClient._ssl_context()) as resp:
                 for raw_line in resp:
                     line = raw_line.decode("utf-8").strip()
                     if not line.startswith("data: "):

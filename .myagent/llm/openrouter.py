@@ -69,7 +69,7 @@ class OpenRouterClient(BaseLLMClient):
             "OpenRouter chat リクエスト送信: model=%s", self._settings.openrouter_model
         )
         try:
-            with urllib.request.urlopen(req) as resp:
+            with urllib.request.urlopen(req, context=self._ssl_context()) as resp:
                 body = json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as e:
             error_body = e.read().decode("utf-8")
