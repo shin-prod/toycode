@@ -12,7 +12,7 @@ class Settings:
     def __init__(self) -> None:
         self._load_dotenv(".env")
 
-        # AI ディレクトリ（モジュールの配置先・書き込み制限の基準）
+        # AI ディレクトリ（エージェント自身のモジュール置き場）
         self.ai_dir: str = os.path.abspath(os.getenv("AI_DIR", ".myagent"))
 
         # LLM プロバイダー
@@ -53,9 +53,11 @@ class Settings:
         self.allow_code_exec: bool = (
             os.getenv("ALLOW_CODE_EXEC", "true").lower() == "true"
         )
-        # WORKSPACE_DIR のデフォルトは AI_DIR（.myagent/）
+        # WORKSPACE_DIR: AI がファイルを読み書きするユーザーの作業ディレクトリ
+        # AI_DIR とは独立した別のディレクトリを想定する
+        # デフォルトはカレントディレクトリ（プロジェクトルート）
         self.workspace_dir: str = os.path.abspath(
-            os.getenv("WORKSPACE_DIR", self.ai_dir)
+            os.getenv("WORKSPACE_DIR", ".")
         )
 
         # ログ設定
