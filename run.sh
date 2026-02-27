@@ -11,6 +11,17 @@ AI_DIR="$(grep -E '^AI_DIR=' .env 2>/dev/null | head -1 | cut -d'=' -f2 | tr -d 
 AI_DIR="${AI_DIR:-.myagent}"
 VENV_DIR="${AI_DIR}/venv"
 
+# WORKSPACE_DIR を .env から取得（デフォルト: カレントディレクトリ）
+WORKSPACE_DIR="$(grep -E '^WORKSPACE_DIR=' .env 2>/dev/null | head -1 | cut -d'=' -f2 | tr -d '"' | tr -d "'")"
+WORKSPACE_DIR="${WORKSPACE_DIR:-.}"
+
+# WORKSPACE_DIR の存在確認
+if [ ! -d "$WORKSPACE_DIR" ]; then
+    echo "[ERROR] WORKSPACE_DIR が存在しません: ${WORKSPACE_DIR}" >&2
+    echo "        .env の WORKSPACE_DIR を確認してください。" >&2
+    exit 1
+fi
+
 # 仮想環境を AI_DIR/venv に作成（初回のみ）
 if [ ! -d "$VENV_DIR" ]; then
     echo "[INFO] 仮想環境を作成しています: ${VENV_DIR}"
