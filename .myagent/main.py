@@ -1,72 +1,21 @@
-"""Claude-Like CLI Tool エントリーポイント。
+"""Claude-Like CLI Tool メインモジュール。
+
+run_agent.py（ランチャー）から呼ばれる。sys.path は呼び出し元で設定済み。
 
 起動順序:
-  1. .env を手動パースして AI_DIR を確認
-  2. AI_DIR を sys.path に追加
-  3. coreprompt.md を読み込む
-  4. LLM クライアント・ツールレジストリ・エージェントを初期化
-  5. REPL ループ開始
+  1. coreprompt.md（プロジェクトルート）を読み込む
+  2. LLM クライアント・ツールレジストリ・エージェントを初期化
+  3. REPL ループ開始
 """
 
 import os
 import sys
 
-
-# ------------------------------------------------------------------
-# ブートストラップ: .env から AI_DIR を読み取り sys.path に追加
-# ------------------------------------------------------------------
-
-def _bootstrap_ai_dir() -> str:
-    """AI_DIR を .env から解決し、モジュール検索パスに追加する。
-
-    .env が存在しない場合や AI_DIR が未定義の場合は '.myagent' を使用する。
-
-    Returns:
-        解決済みの AI ディレクトリ絶対パス
-    """
-    env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
-    ai_dir_rel = ".myagent"  # デフォルト値
-
-    if os.path.exists(env_path):
-        with open(env_path, encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line or line.startswith("#") or "=" not in line:
-                    continue
-                key, _, val = line.partition("=")
-                if key.strip() == "AI_DIR":
-                    ai_dir_rel = val.strip().strip('"').strip("'")
-                    break
-
-    base = os.path.dirname(os.path.abspath(__file__))
-    ai_dir = os.path.join(base, ai_dir_rel)
-
-    if not os.path.isdir(ai_dir):
-        print(
-            f"エラー: AI_DIR が存在しません: {ai_dir}\n"
-            f"  AI_DIR={ai_dir_rel} を確認してください。",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    if ai_dir not in sys.path:
-        sys.path.insert(0, ai_dir)
-
-    # プロジェクトルートも追加（.env 読み込み用）
-    if base not in sys.path:
-        sys.path.insert(1, base)
-
-    return ai_dir
-
-
-# AI_DIR をブートストラップしてから各モジュールを import
-_AI_DIR = _bootstrap_ai_dir()
-
-from config import settings  # noqa: E402  (sys.path 追加後に import)
-from llm import get_client  # noqa: E402
-from tools import build_registry  # noqa: E402
-from agent import Agent  # noqa: E402
-from utils.logger import get_logger  # noqa: E402
+from config import settings
+from llm import get_client
+from tools import build_registry
+from agent import Agent
+from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -80,9 +29,9 @@ _BANNER = """
 ╚══════════════════════════════════════════════════════╝
 """
 
-_COREPROMPT_PATH = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "coreprompt.md"
-)
+# coreprompt.md はプロジェクトルート（.myagent の親ディレクトリ）に配置
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_COREPROMPT_PATH = os.path.join(_PROJECT_ROOT, "coreprompt.md")
 
 
 def _load_coreprompt() -> str | None:

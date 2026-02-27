@@ -2,61 +2,17 @@
 
 read_file / write_file / edit_file / list_directory / search_files を提供する。
 
-書き込み系操作（write_file / edit_file）は AI_DIR（.myagent/）以下に制限される。
+書き込み系操作（write_file / edit_file）は WORKSPACE_DIR 以下に制限される。
 読み取り系操作（read_file / list_directory / search_files）は制限なし。
 """
 
 import os
 import re
 
+from utils.file_guard import check_write_allowed
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
-
-
-def _resolve_path(path: str) -> str:
-    """パスを解決する（絶対パスはそのまま、相対パスは CWD 基準）。
-
-    Args:
-        path: 入力パス
-
-    Returns:
-        解決済みの絶対パス
-    """
-    return os.path.abspath(path)
-
-
-def _check_write_allowed(resolved: str) -> str | None:
-    """書き込みパスが AI_DIR 以下かどうかを確認する。
-
-    ログファイルはルートへの書き込みを許可する。
-
-    Args:
-        resolved: 書き込み先の絶対パス
-
-    Returns:
-        許可される場合は None、拒否される場合はエラーメッセージ文字列
-    """
-    from config import settings
-
-    ai_dir = settings.ai_dir
-    log_file = os.path.abspath(settings.log_file)
-
-    # ログファイルは許可
-    if resolved == log_file:
-        return None
-
-    # AI_DIR 以下であれば許可
-    common = os.path.commonpath([resolved, ai_dir])
-    if common == ai_dir:
-        return None
-
-    return (
-        f"エラー: AI_DIR 外への書き込みは禁止されています。\n"
-        f"  対象パス : {resolved}\n"
-        f"  許可範囲 : {ai_dir}\n"
-        "  AI_DIR 外のファイルを変更したい場合はユーザーに確認してください。"
-    )
 
 
 def read_file(path: str) -> str:
@@ -82,10 +38,22 @@ def read_file(path: str) -> str:
         return f"エラー: ファイル読み込み失敗: {e}"
 
 
+def _resolve_path(path: str) -> str:
+    """パスを解決する（絶対パスはそのまま、相対パスは CWD 基準）。
+
+    Args:
+        path: 入力パス
+
+    Returns:
+        解決済みの絶対パス
+    """
+    return os.path.abspath(path)
+
+
 def write_file(path: str, content: str) -> str:
     """ファイルに内容を書き込む（新規作成・上書き）。
 
-    AI_DIR 外への書き込みは拒否される。
+    WORKSPACE_DIR 外への書き込みは拒否される。
 
     Args:
         path: 書き込み先ファイルのパス
@@ -95,8 +63,7 @@ def write_file(path: str, content: str) -> str:
         成功メッセージまたはエラーメッセージ
     """
     resolved = _resolve_path(path)
-    if err := _check_write_allowed(resolved):
-        logger.warning("write_file: 書き込み拒否 %s", resolved)
+    if err := check_write_allowed(resolved):
         return err
     logger.debug("write_file: %s", resolved)
     try:
@@ -112,7 +79,7 @@ def write_file(path: str, content: str) -> str:
 def edit_file(path: str, old_string: str, new_string: str) -> str:
     """既存ファイルの old_string を new_string に置換して編集する。
 
-    AI_DIR 外への書き込みは拒否される。
+    WORKSPACE_DIR 外への書き込みは拒否される。
 
     Args:
         path: 編集するファイルのパス
@@ -123,8 +90,7 @@ def edit_file(path: str, old_string: str, new_string: str) -> str:
         成功メッセージまたはエラーメッセージ
     """
     resolved = _resolve_path(path)
-    if err := _check_write_allowed(resolved):
-        logger.warning("edit_file: 書き込み拒否 %s", resolved)
+    if err := check_write_allowed(resolved):
         return err
     logger.debug("edit_file: %s", resolved)
     if not os.path.isfile(resolved):

@@ -20,4 +20,4 @@ python3 -c "import pptx, docx, openpyxl" 2>/dev/null || {
 }
 
 # アプリ起動
-python3 main.py "$@"
+python3 run_agent.py "$@"

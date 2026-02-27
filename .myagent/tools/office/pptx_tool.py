@@ -1,8 +1,10 @@
 """PowerPoint (PPTX) 操作ツール。python-pptx を使用する。"""
 
 import json
+import os
 from typing import Optional
 
+from utils.file_guard import check_write_allowed
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -81,8 +83,9 @@ def pptx_edit_slide(
     except ImportError:
         return "エラー: python-pptx がインストールされていません。pip install python-pptx"
 
-    import os
     resolved = os.path.abspath(path)
+    if err := check_write_allowed(resolved):
+        return err
     if not os.path.isfile(resolved):
         return f"エラー: ファイルが存在しません: {resolved}"
 
@@ -142,8 +145,9 @@ def pptx_add_slide(
     except ImportError:
         return "エラー: python-pptx がインストールされていません。pip install python-pptx"
 
-    import os
     resolved = os.path.abspath(path)
+    if err := check_write_allowed(resolved):
+        return err
     if not os.path.isfile(resolved):
         return f"エラー: ファイルが存在しません: {resolved}"
 
