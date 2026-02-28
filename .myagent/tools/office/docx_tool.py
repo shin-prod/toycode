@@ -3,7 +3,7 @@
 import json
 import os
 
-from utils.file_guard import check_write_allowed
+from utils.file_guard import check_write_allowed, resolve_path
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -25,7 +25,7 @@ def docx_read(path: str) -> str:
     except ImportError:
         return "エラー: python-docx がインストールされていません。pip install python-docx"
 
-    resolved = os.path.abspath(path)
+    resolved = resolve_path(path)
     if not os.path.isfile(resolved):
         return f"エラー: ファイルが存在しません: {resolved}"
 
@@ -78,7 +78,7 @@ def docx_edit(path: str, paragraph_index: int, new_text: str) -> str:
     except ImportError:
         return "エラー: python-docx がインストールされていません。pip install python-docx"
 
-    resolved = os.path.abspath(path)
+    resolved = resolve_path(path)
     if err := check_write_allowed(resolved):
         return err
     if not os.path.isfile(resolved):

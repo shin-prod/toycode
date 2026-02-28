@@ -4,7 +4,7 @@ import json
 import os
 from typing import Any, Optional
 
-from utils.file_guard import check_write_allowed
+from utils.file_guard import check_write_allowed, resolve_path
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -25,7 +25,7 @@ def xlsx_read(path: str, sheet_name: Optional[str] = None) -> str:
     except ImportError:
         return "エラー: openpyxl がインストールされていません。pip install openpyxl"
 
-    resolved = os.path.abspath(path)
+    resolved = resolve_path(path)
     if not os.path.isfile(resolved):
         return f"エラー: ファイルが存在しません: {resolved}"
 
@@ -84,7 +84,7 @@ def xlsx_write_cell(
     except ImportError:
         return "エラー: openpyxl がインストールされていません。pip install openpyxl"
 
-    resolved = os.path.abspath(path)
+    resolved = resolve_path(path)
     if err := check_write_allowed(resolved):
         return err
     if not os.path.isfile(resolved):

@@ -1,7 +1,5 @@
 """Claude-Like CLI Tool メインモジュール。
 
-run_agent.py（ランチャー）から呼ばれる。sys.path は呼び出し元で設定済み。
-
 起動順序:
   1. coreprompt.md（プロジェクトルート）を読み込む
   2. LLM クライアント・ツールレジストリ・エージェントを初期化
@@ -15,19 +13,18 @@ from config import settings
 from llm import get_client
 from tools import build_registry
 from agent import Agent
+from agent.stream import print_ai_header
 from utils.logger import get_logger
+from utils.status_bar import status_bar
 
 logger = get_logger(__name__)
 
-_BANNER = """
-╔══════════════════════════════════════════════════════╗
-║          Claude-Like CLI Tool  v1.0                  ║
-║  Python AI エージェント / OpenRouter・Azure 対応     ║
-╠══════════════════════════════════════════════════════╣
-║  /help  ヘルプ表示   /clear  履歴クリア              ║
-║  /tools ツール一覧   /exit   終了                    ║
-╚══════════════════════════════════════════════════════╝
-"""
+# ANSI カラー定数
+_B = "\033[1m"
+_C_DIM = "\033[2m"
+_C_GREEN = "\033[32m"
+_C_ERR = "\033[31m"
+_C_RESET = "\033[0m"
 
 # coreprompt.md はプロジェクトルート（.myagent の親ディレクトリ）に配置
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -52,16 +49,30 @@ def _load_coreprompt() -> str | None:
 
 
 def print_banner() -> None:
-    """バナーを表示する。"""
-    print(_BANNER)
-    print(f"  プロバイダー: {settings.provider.upper()}")
-    if settings.provider == "openrouter":
-        print(f"  モデル      : {settings.openrouter_model}")
-    else:
-        print(f"  デプロイ    : {settings.azure_deployment}")
-    print(f"  AI ディレクトリ: {settings.ai_dir}")
-    print(f"  ストリーム  : {'有効' if settings.stream else '無効'}")
-    print(f"  最大ループ  : {settings.max_agent_loops} 回")
+    """バナーを表示する（llama.cpp スタイル）。"""
+    model = (
+        settings.openrouter_model
+        if settings.provider == "openrouter"
+        else settings.azure_deployment
+    )
+    stream_label = "true" if settings.stream else "false"
+
+    dim = _C_DIM
+    reset = _C_RESET
+
+    print(f"\n{_B}Claude-Like CLI Tool{reset}  {dim}v1.1{reset}")
+    print(f"{dim}{'─' * 40}{reset}")
+    print(f"{dim}provider   :{reset}  {settings.provider.upper()}")
+    print(f"{dim}model      :{reset}  {model}")
+    print(f"{dim}stream     :{reset}  {stream_label}")
+    print(f"{dim}max loops  :{reset}  {settings.max_agent_loops}")
+    print()
+    print(f"{dim}available commands:{reset}")
+    print(f"  {dim}/help   {reset}  ヘルプを表示")
+    print(f"  {dim}/clear  {reset}  会話履歴をクリア")
+    print(f"  {dim}/tools  {reset}  登録済みツール一覧")
+    print(f"  {dim}/reload {reset}  コアプロンプトをリロード")
+    print(f"  {dim}/exit   {reset}  終了")
     print()
 
 
@@ -134,12 +145,16 @@ def main() -> None:
 
     print_banner()
     logger.info("エージェント初期化完了")
+    status_bar.start()
 
     # REPL ループ
     while True:
+        print()
+        status_bar.set("待機中")
         try:
-            user_input = input("\033[32m> \033[0m").strip()
+            user_input = input(f"{_C_GREEN}>{_C_RESET} ").strip()
         except (EOFError, KeyboardInterrupt):
+            status_bar.stop()
             print("\n終了します。")
             break
 
@@ -148,20 +163,24 @@ def main() -> None:
 
         if user_input.startswith("/"):
             if not handle_command(user_input, agent):
+                status_bar.stop()
                 break
             continue
 
         logger.debug("ユーザー入力: %s", user_input[:100])
         try:
+            response = agent.run(user_input)
             if not settings.stream:
-                response = agent.run(user_input)
+                # 非ストリーミング: run() はテキストのみ返すので表示する
+                print_ai_header()
                 if response.startswith("⚠"):
-                    print(f"\n\033[31m{response}\033[0m")
+                    print(f"{_C_ERR}{response}{_C_RESET}")
                 else:
-                    print(f"\n{response}")
-            else:
-                print()
-                agent.run(user_input)
+                    print(response)
+            elif response.startswith("⚠"):
+                # ストリーミング: print_stream が最終回答を表示済み
+                # ⚠ 警告（ループ上限）だけ別途表示する
+                print(f"{_C_ERR}{response}{_C_RESET}")
         except RuntimeError as e:
             print(f"\n\033[31mエラー: {e}\033[0m", file=sys.stderr)
             logger.error("エージェント実行エラー: %s", e)

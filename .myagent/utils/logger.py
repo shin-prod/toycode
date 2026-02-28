@@ -37,19 +37,19 @@ def get_logger(name: str, level: Optional[str] = None) -> logging.Logger:
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
-    # コンソールハンドラ
+    # コンソールハンドラ: WARNING 以上のみ表示（INFO/DEBUG はチャットに混入させない）
     ch = logging.StreamHandler()
-    ch.setLevel(log_level)
+    ch.setLevel(logging.WARNING)
     ch.setFormatter(fmt)
     logger.addHandler(ch)
 
-    # ファイルハンドラ
+    # ファイルハンドラ: 設定レベルをすべて記録
     try:
         fh = logging.FileHandler(log_file, encoding="utf-8")
         fh.setLevel(log_level)
         fh.setFormatter(fmt)
         logger.addHandler(fh)
-    except OSError:
-        pass  # ファイルハンドラ追加失敗時はコンソールのみ
+    except OSError as e:
+        logger.warning("ログファイルを開けません (%s): %s", log_file, e)
 
     return logger

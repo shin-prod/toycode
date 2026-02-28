@@ -65,7 +65,12 @@ class ToolRegistry:
         if name not in self._tools:
             raise KeyError(f"未登録のツール: {name}")
         handler = self._tools[name]["handler"]
-        logger.info("ツール実行: %s(%s)", name, args)
+        # 長い引数値はログで切り詰める
+        brief = {
+            k: (v[:80] + "…") if isinstance(v, str) and len(v) > 80 else v
+            for k, v in args.items()
+        }
+        logger.info("ツール実行: %s(%s)", name, brief)
         return handler(**args)
 
     def list_tools(self) -> list[str]:

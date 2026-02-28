@@ -144,11 +144,11 @@ def build_registry() -> ToolRegistry:
     )
     registry.register(
         name="pptx_add_slide",
-        description="PPTX ファイルにスライドを追加する。",
+        description="PPTX ファイルにスライドを追加する。ファイルが存在しない場合は新規作成する。",
         parameters={
             "type": "object",
             "properties": {
-                "path": {"type": "string", "description": "PPTX ファイルのパス"},
+                "path": {"type": "string", "description": "PPTX ファイルのパス（存在しない場合は新規作成）"},
                 "title": {"type": "string", "description": "新しいスライドのタイトル"},
                 "content": {
                     "type": "string",
@@ -158,6 +158,135 @@ def build_registry() -> ToolRegistry:
             "required": ["path", "title"],
         },
         handler=pptx_tool.pptx_add_slide,
+    )
+    registry.register(
+        name="pptx_add_shape",
+        description=(
+            "スライドにオートシェイプ（図形）を追加する。"
+            " shape_type: rectangle / rounded_rectangle / oval / triangle /"
+            " diamond / hexagon / pentagon / right_arrow / left_arrow /"
+            " up_arrow / down_arrow / double_arrow / star4 / star5 / callout"
+        ),
+        parameters={
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "PPTX ファイルのパス"},
+                "slide_index": {
+                    "type": "integer",
+                    "description": "対象スライドのインデックス（0始まり）",
+                },
+                "shape_type": {
+                    "type": "string",
+                    "description": "図形の種類（例: rectangle, oval, right_arrow）",
+                },
+                "left": {"type": "number", "description": "左端位置（インチ）"},
+                "top": {"type": "number", "description": "上端位置（インチ）"},
+                "width": {"type": "number", "description": "幅（インチ）"},
+                "height": {"type": "number", "description": "高さ（インチ）"},
+                "text": {
+                    "type": "string",
+                    "description": "図形内に表示するテキスト（省略可）",
+                },
+                "fill_color": {
+                    "type": "string",
+                    "description": "塗りつぶし色 16進数 RGB（例: FF0000）（省略可）",
+                },
+                "line_color": {
+                    "type": "string",
+                    "description": "枠線色 16進数 RGB（例: 0000FF）（省略可）",
+                },
+            },
+            "required": ["path", "slide_index", "shape_type", "left", "top", "width", "height"],
+        },
+        handler=pptx_tool.pptx_add_shape,
+    )
+    registry.register(
+        name="pptx_add_textbox",
+        description="スライドに任意位置のテキストボックスを追加する。",
+        parameters={
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "PPTX ファイルのパス"},
+                "slide_index": {
+                    "type": "integer",
+                    "description": "対象スライドのインデックス（0始まり）",
+                },
+                "text": {"type": "string", "description": "テキスト内容"},
+                "left": {"type": "number", "description": "左端位置（インチ）"},
+                "top": {"type": "number", "description": "上端位置（インチ）"},
+                "width": {"type": "number", "description": "幅（インチ）"},
+                "height": {"type": "number", "description": "高さ（インチ）"},
+                "font_size": {
+                    "type": "integer",
+                    "description": "フォントサイズ pt（デフォルト: 18）",
+                },
+                "bold": {
+                    "type": "boolean",
+                    "description": "太字にするか（デフォルト: false）",
+                },
+                "font_color": {
+                    "type": "string",
+                    "description": "文字色 16進数 RGB（例: FF0000）（省略可）",
+                },
+            },
+            "required": ["path", "slide_index", "text", "left", "top", "width", "height"],
+        },
+        handler=pptx_tool.pptx_add_textbox,
+    )
+    registry.register(
+        name="pptx_add_picture",
+        description="スライドに画像ファイルを挿入する。width/height を 0 にするとアスペクト比を維持。",
+        parameters={
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "PPTX ファイルのパス"},
+                "slide_index": {
+                    "type": "integer",
+                    "description": "対象スライドのインデックス（0始まり）",
+                },
+                "image_path": {
+                    "type": "string",
+                    "description": "挿入する画像ファイルのパス",
+                },
+                "left": {"type": "number", "description": "左端位置（インチ）"},
+                "top": {"type": "number", "description": "上端位置（インチ）"},
+                "width": {
+                    "type": "number",
+                    "description": "幅（インチ）。0 の場合は height からアスペクト比維持",
+                },
+                "height": {
+                    "type": "number",
+                    "description": "高さ（インチ）。0 の場合は width からアスペクト比維持",
+                },
+            },
+            "required": ["path", "slide_index", "image_path", "left", "top"],
+        },
+        handler=pptx_tool.pptx_add_picture,
+    )
+    registry.register(
+        name="pptx_add_table",
+        description="スライドにテーブル（表）を追加する。data は行×列の2次元リスト。",
+        parameters={
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "PPTX ファイルのパス"},
+                "slide_index": {
+                    "type": "integer",
+                    "description": "対象スライドのインデックス（0始まり）",
+                },
+                "data": {
+                    "type": "array",
+                    "description": "セルデータの2次元リスト（行×列）。1行目がヘッダー",
+                    "items": {"type": "array", "items": {}},
+                },
+                "left": {"type": "number", "description": "左端位置（インチ）"},
+                "top": {"type": "number", "description": "上端位置（インチ）"},
+                "width": {"type": "number", "description": "幅（インチ）"},
+                "height": {"type": "number", "description": "高さ（インチ）"},
+            },
+            "required": ["path", "slide_index", "data", "left", "top", "width", "height"],
+        },
+        handler=pptx_tool.pptx_add_table,
     )
     registry.register(
         name="docx_read",

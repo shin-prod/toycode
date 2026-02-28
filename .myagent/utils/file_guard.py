@@ -11,6 +11,24 @@ from utils.logger import get_logger
 logger = get_logger(__name__)
 
 
+def resolve_path(path: str) -> str:
+    """パスを解決する。
+
+    絶対パスはそのまま返す。
+    相対パスは WORKSPACE_DIR を基点として解決する（CWD ではない）。
+
+    Args:
+        path: 入力パス（絶対または相対）
+
+    Returns:
+        解決済みの絶対パス
+    """
+    if os.path.isabs(path):
+        return os.path.normpath(path)
+    from config import settings
+    return os.path.abspath(os.path.join(settings.workspace_dir, path))
+
+
 def check_write_allowed(resolved: str) -> str | None:
     """書き込みパスが WORKSPACE_DIR 以下かどうかを確認する。
 
