@@ -30,6 +30,15 @@ _C_RESET = "\033[0m"
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _COREPROMPT_PATH = os.path.join(_PROJECT_ROOT, "coreprompt.md")
 
+# キーワードに応じて遅延ロードする追加コアプロンプト定義
+# { ファイル名: (トリガーキーワード集, 通知メッセージ) }
+_EXTRA_PROMPTS: dict[str, tuple[frozenset[str], str]] = {
+    "coreprompt_ppt.md": (
+        frozenset(["ppt", "pptx", "powerpoint", "スライド", "プレゼン"]),
+        "PPT ガイドラインを読み込みました",
+    ),
+}
+
 
 def _load_coreprompt() -> str | None:
     """coreprompt.md を読み込んでシステムプロンプトとして返す。
@@ -46,6 +55,60 @@ def _load_coreprompt() -> str | None:
         content = f.read().strip()
     logger.info("coreprompt.md を読み込みました (%d 文字)", len(content))
     return content
+
+
+def _load_extra_coreprompt(filename: str) -> str | None:
+    """追加コアプロンプトファイルをプロジェクトルートから読み込む。
+
+    Args:
+        filename: ファイル名（プロジェクトルート直下）
+
+    Returns:
+        ファイルの内容、またはファイルがない場合は None
+    """
+    path = os.path.join(_PROJECT_ROOT, filename)
+    if not os.path.isfile(path):
+        logger.warning("追加コアプロンプトが見つかりません: %s", path)
+        return None
+    with open(path, encoding="utf-8") as f:
+        content = f.read().strip()
+    logger.info("追加コアプロンプトを読み込みました: %s (%d 文字)", filename, len(content))
+    return content
+
+
+def _maybe_inject_extra_prompts(
+    user_input: str,
+    agent: "Agent",
+    loaded: set[str],
+    system_content: list[str],
+) -> None:
+    """ユーザー入力のキーワードに応じて追加コアプロンプトを遅延ロードする。
+
+    既にロード済みのものはスキップする。
+    ロードした場合はシステムプロンプトを更新してユーザーに通知する。
+
+    Args:
+        user_input: ユーザーの入力テキスト
+        agent: 現在のエージェントインスタンス
+        loaded: ロード済みファイル名のセット（更新される）
+        system_content: システムプロンプト文字列のリスト（先頭が base）
+    """
+    low = user_input.lower()
+    updated = False
+    for filename, (keywords, notice) in _EXTRA_PROMPTS.items():
+        if filename in loaded:
+            continue
+        if not any(kw in low for kw in keywords):
+            continue
+        content = _load_extra_coreprompt(filename)
+        if content:
+            system_content.append(content)
+            agent.history.set_system("\n\n---\n\n".join(system_content))
+            loaded.add(filename)
+            updated = True
+            print(f"{_C_DIM}[ {notice} ]{_C_RESET}")
+    if updated:
+        logger.debug("システムプロンプトを更新しました (sections=%d)", len(system_content))
 
 
 def print_banner() -> None:
@@ -143,6 +206,10 @@ def main() -> None:
     system_prompt = _load_coreprompt()
     agent = Agent(llm, registry, system_prompt=system_prompt)
 
+    # システムプロンプトの各セクションを追跡（追加プロンプト結合用）
+    _system_sections: list[str] = [system_prompt] if system_prompt else []
+    _extra_loaded: set[str] = set()
+
     print_banner()
     logger.info("エージェント初期化完了")
     status_bar.start()
@@ -166,6 +233,9 @@ def main() -> None:
                 status_bar.stop()
                 break
             continue
+
+        # キーワードに応じて追加コアプロンプトを遅延ロード
+        _maybe_inject_extra_prompts(user_input, agent, _extra_loaded, _system_sections)
 
         logger.debug("ユーザー入力: %s", user_input[:100])
         try:
