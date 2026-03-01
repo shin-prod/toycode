@@ -46,6 +46,8 @@ class Agent:
         llm: BaseLLMClient,
         registry: ToolRegistry,
         system_prompt: Optional[str] = None,
+        on_tool_start=None,
+        on_tool_end=None,
     ) -> None:
         from config import settings
 
@@ -54,6 +56,11 @@ class Agent:
         self.registry = registry
         self.history = ConversationHistory(max_tokens=settings.max_context_tokens)
         self.history.set_system(system_prompt or _SYSTEM_PROMPT)
+        # ツール実行コールバック（Chainlit など外部 UI との連携用）
+        # on_tool_start(name: str, args: dict) -> None
+        # on_tool_end(name: str, result: str) -> None
+        self.on_tool_start = on_tool_start
+        self.on_tool_end = on_tool_end
 
     def run(self, user_input: str) -> str:
         """ユーザー入力を受け取り、ツール呼び出しループを経て最終回答を返す。
@@ -242,6 +249,8 @@ class Agent:
             status_bar.set("実行中")
             tool_log.append((tc.name, tc.arguments))  # サマリー用に記録
             print_tool_call(tc.name, tc.arguments)
+            if self.on_tool_start:
+                self.on_tool_start(tc.name, tc.arguments)
             try:
                 with Spinner("作業中"):
                     result = self.registry.dispatch(tc.name, tc.arguments)
@@ -253,6 +262,8 @@ class Agent:
                 logger.error("ツール実行エラー %s: %s", tc.name, e)
                 result = f"エラー: ツール実行失敗: {e}"
             print_tool_result(tc.name, result)
+            if self.on_tool_end:
+                self.on_tool_end(tc.name, result)
             results.append(
                 {"tool_call_id": tc.id, "name": tc.name, "result": result}
             )
