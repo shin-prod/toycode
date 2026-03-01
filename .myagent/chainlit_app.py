@@ -152,18 +152,19 @@ async def on_message(message: cl.Message) -> None:
     agent.on_tool_start = on_tool_start
     agent.on_tool_end = on_tool_end
 
-    # 空メッセージを先に送信して、後から内容を更新する（ローディング表示）
-    response_msg = cl.Message(content="")
-    await response_msg.send()
+    # async with cl.Step を使うと、ブロック実行中はスピナーが表示される。
+    # ツール呼び出し Step はここにネストされて表示される。
+    response = f"❌ エラーが発生しました（不明）"
+    async with cl.Step(name="考え中...", type="run", show_input=False) as thinking:
+        try:
+            response = await asyncio.to_thread(agent.run, message.content)
+        except Exception as e:
+            logger.error("エージェント実行エラー: %s", e, exc_info=True)
+            response = f"❌ エラーが発生しました: {e}"
+            thinking.is_error = True
+        finally:
+            agent.on_tool_start = None
+            agent.on_tool_end = None
 
-    try:
-        response = await asyncio.to_thread(agent.run, message.content)
-    except Exception as e:
-        logger.error("エージェント実行エラー: %s", e, exc_info=True)
-        response = f"❌ エラーが発生しました: {e}"
-    finally:
-        agent.on_tool_start = None
-        agent.on_tool_end = None
-
-    response_msg.content = response
-    await response_msg.update()
+    # ツール実行ステップが折り畳まれた後、最終回答を平文メッセージで送信
+    await cl.Message(content=response).send()
