@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <!-- 背景 -->
+  <rect width="400" height="400" fill="white"/>
+  
+  <!-- 左手 -->
+  <ellipse cx="100" cy="220" rx="25" ry="35" fill="#FFB6C1" stroke="#FF69B4" stroke-width="2" transform="rotate(-30, 100, 220)"/>
+  
+  <!-- 右手（挙げてる） -->
+  <ellipse cx="290" cy="150" rx="25" ry="35" fill="#FFB6C1" stroke="#FF69B4" stroke-width="2" transform="rotate(-20, 290, 150)"/>
+  
+  <!-- 左足 -->
+  <ellipse cx="140" cy="310" rx="30" ry="40" fill="#FF69B4" stroke="#FF1493" stroke-width="2" transform="rotate(-20, 140, 310)"/>
+  
+  <!-- 右足 -->
+  <ellipse cx="260" cy="310" rx="30" ry="40" fill="#FF69B4" stroke="#FF1493" stroke-width="2" transform="rotate(20, 260, 310)"/>
+  
+  <!-- 体（ピンクの丸） -->
+  <circle cx="200" cy="220" r="100" fill="#FFB6C1" stroke="#FF69B4" stroke-width="3"/>
+  
+  <!-- 左目 -->
+  <ellipse cx="165" cy="190" rx="12" ry="28" fill="black"/>
+  <ellipse cx="168" cy="180" rx="5" ry="10" fill="white"/>
+  
+  <!-- 右目 -->
+  <ellipse cx="235" cy="190" rx="12" ry="28" fill="black"/>
+  <ellipse cx="238" cy="180" rx="5" ry="10" fill="white"/>
+  
+  <!-- 左ほっぺ -->
+  <circle cx="125" cy="235" r="20" fill="#FF69B4"/>
+  
+  <!-- 右ほっぺ -->
+  <circle cx="275" cy="235" r="20" fill="#FF69B4"/>
+  
+  <!-- 口（笑顔） -->
+  <path d="M 185 240 Q 200 255 215 240" stroke="black" stroke-width="3" fill="none" stroke-linecap="round"/>
+</svg>

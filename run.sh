@@ -32,14 +32,10 @@ fi
 source "${VENV_DIR}/bin/activate"
 
 # 依存パッケージのインストール確認（初回 or requirements.txt 更新時）
-python -c "import pptx, docx, openpyxl, chainlit" 2>/dev/null || {
+python -c "import pptx, docx, openpyxl" 2>/dev/null || {
     echo "[INFO] 依存パッケージをインストールします..."
     pip install -r requirements.txt
 }
 
 # アプリ起動
-# 使い方:
-#   ./run.sh                      # CLI モード（デフォルト）
-#   ./run.sh --mode chainlit      # Chainlit Web UI モード
-#   ./run.sh --mode chainlit --port 8080  # ポート指定
 python run_agent.py "$@"
