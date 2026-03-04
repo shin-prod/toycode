@@ -3,7 +3,8 @@
 起動順序:
   1. coreprompt.md（プロジェクトルート）を読み込む
   2. LLM クライアント・ツールレジストリ・エージェントを初期化
-  3. REPL ループ開始
+  3. WORKSPACE_DIR の AGENTS.md を収集・ロード（Codex 方式）
+  4. REPL ループ開始
 """
 
 import os
@@ -30,6 +31,13 @@ _C_RESET = "\033[0m"
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _COREPROMPT_PATH = os.path.join(_PROJECT_ROOT, "coreprompt.md")
 
+# AGENTS.md ロード設定（Codex 方式）
+_AGENTS_MD_FILENAME = "AGENTS.md"
+_AGENTS_MD_MAX_DEPTH = 3          # ワークスペースルートからの探索最大深度
+_AGENTS_MD_SKIP_DIRS = frozenset(  # スキップするディレクトリ名
+    ["venv", ".venv", "__pycache__", "node_modules", "dist", "build"]
+)
+
 # キーワードに応じて遅延ロードする追加コアプロンプト定義
 # { ファイル名: (トリガーキーワード集, 通知メッセージ) }
 _EXTRA_PROMPTS: dict[str, tuple[frozenset[str], str]] = {
@@ -55,6 +63,46 @@ def _load_coreprompt() -> str | None:
         content = f.read().strip()
     logger.info("coreprompt.md を読み込みました (%d 文字)", len(content))
     return content
+
+
+def _collect_agents_md(workspace_dir: str) -> list[tuple[str, str]]:
+    """ワークスペースから AGENTS.md ファイルを収集する。
+
+    Codex の AGENTS.md ロード方式に相当。
+    ルートから最大 _AGENTS_MD_MAX_DEPTH 階層まで再帰探索し、
+    見つかったファイルをパス順（浅い順）に返す。
+    隠しディレクトリと仮想環境などはスキップする。
+
+    Args:
+        workspace_dir: 探索ルートディレクトリ
+
+    Returns:
+        [(絶対パス, 内容), ...] のリスト（ルートから深い順）
+    """
+    found: list[tuple[str, str]] = []
+    for root, dirs, files in os.walk(workspace_dir):
+        rel = os.path.relpath(root, workspace_dir)
+        depth = 0 if rel == "." else len(rel.split(os.sep))
+        if depth >= _AGENTS_MD_MAX_DEPTH:
+            dirs.clear()
+            continue
+        # 隠しディレクトリ・既知の無関係ディレクトリをスキップ（安定した探索順に sort）
+        dirs[:] = sorted(
+            d for d in dirs
+            if not d.startswith(".") and d not in _AGENTS_MD_SKIP_DIRS
+        )
+        if _AGENTS_MD_FILENAME not in files:
+            continue
+        path = os.path.join(root, _AGENTS_MD_FILENAME)
+        try:
+            with open(path, encoding="utf-8") as f:
+                content = f.read().strip()
+            if content:
+                found.append((path, content))
+                logger.info("AGENTS.md 検出: %s (%d 文字)", path, len(content))
+        except OSError as e:
+            logger.warning("AGENTS.md 読み込みエラー: %s: %s", path, e)
+    return found
 
 
 def _load_extra_coreprompt(filename: str) -> str | None:
@@ -125,10 +173,12 @@ def print_banner() -> None:
 
     print(f"\n{_B}Claude-Like CLI Tool{reset}  {dim}v1.1{reset}")
     print(f"{dim}{'─' * 40}{reset}")
+    workspace_rel = os.path.relpath(settings.workspace_dir)
     print(f"{dim}provider   :{reset}  {settings.provider.upper()}")
     print(f"{dim}model      :{reset}  {model}")
     print(f"{dim}stream     :{reset}  {stream_label}")
     print(f"{dim}max loops  :{reset}  {settings.max_agent_loops}")
+    print(f"{dim}workspace  :{reset}  {workspace_rel}")
     print()
     print(f"{dim}available commands:{reset}")
     print(f"  {dim}/help   {reset}  ヘルプを表示")
@@ -210,7 +260,19 @@ def main() -> None:
     _system_sections: list[str] = [system_prompt] if system_prompt else []
     _extra_loaded: set[str] = set()
 
+    # AGENTS.md をワークスペースから収集・ロード（Codex 方式）
+    _agents_md_entries = _collect_agents_md(settings.workspace_dir)
+    for agents_path, agents_content in _agents_md_entries:
+        rel_path = os.path.relpath(agents_path, settings.workspace_dir)
+        _system_sections.append(f"# AGENTS.md ({rel_path})\n\n{agents_content}")
+    if _agents_md_entries:
+        agent.history.set_system("\n\n---\n\n".join(_system_sections))
+
     print_banner()
+    if _agents_md_entries:
+        for agents_path, _ in _agents_md_entries:
+            rel_path = os.path.relpath(agents_path, settings.workspace_dir)
+            print(f"{_C_DIM}[ AGENTS.md: {rel_path} ]{_C_RESET}")
     logger.info("エージェント初期化完了")
     status_bar.start()
 
