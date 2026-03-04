@@ -182,68 +182,72 @@ class ContextManager:
 
     @staticmethod
     def _normalize(items: list[dict]) -> list[dict]:
-        """tool_call/tool_result ペアの整合性を保証する。
+        """tool_call/tool_result ペアの整合性を保証する（2パス方式）。
 
-        Codex の normalize_history() に相当。以下の不整合を修正:
-          1. tool_call に対応する tool_result がない → 合成エラー結果を追加
-          2. tool_result に対応する tool_call がない → tool_result を削除
+        Codex の normalize_history() → ensure_call_outputs_present() +
+        remove_orphan_outputs() の Python 移植。
+
+        Pass 1 (ensure_call_outputs_present 相当):
+          対応する tool_result のない tool_call の直後に合成エラー結果を挿入。
+          インデックスがずれないよう逆順で挿入する。
+
+        Pass 2 (remove_orphan_outputs 相当):
+          Pass 1 完了後に、対応する tool_call のない孤立 tool_result を削除。
 
         Args:
-            items: 正規化前のメッセージリスト
+            items: 正規化前のメッセージリスト（元のリストは変更しない）
 
         Returns:
-            正規化後のメッセージリスト
+            正規化後の新しいメッセージリスト
         """
-        result: list[dict] = []
-        expected_tool_ids: set[str] = set()
+        # Pass 1: ensure_call_outputs_present
+        # 既存の tool_result の call_id セットを収集
+        existing_result_ids: set[str] = {
+            msg["tool_call_id"]
+            for msg in items
+            if msg.get("role") == "tool" and "tool_call_id" in msg
+        }
 
-        for msg in items:
-            role = msg.get("role")
-
-            if role == "assistant" and msg.get("tool_calls"):
-                # 前の assistant の tool_calls が未解決なら合成結果を挿入
-                if expected_tool_ids:
-                    for tc_id in sorted(expected_tool_ids):
-                        result.append({
-                            "role": "tool",
-                            "tool_call_id": tc_id,
-                            "content": "(中断されました)",
-                        })
-                    expected_tool_ids.clear()
-                result.append(msg)
+        # 対応する tool_result がない tool_call を見つけ、直後への挿入を予約
+        inserts: list[tuple[int, dict]] = []  # (挿入位置, 合成メッセージ)
+        for idx, msg in enumerate(items):
+            if msg.get("role") == "assistant" and msg.get("tool_calls"):
                 for tc in msg["tool_calls"]:
-                    expected_tool_ids.add(tc["id"])
-
-            elif role == "tool":
-                tc_id = msg.get("tool_call_id", "")
-                if tc_id in expected_tool_ids:
-                    result.append(msg)
-                    expected_tool_ids.discard(tc_id)
-                else:
-                    # 対応する tool_call がない孤立した tool_result → 削除
-                    logger.debug("孤立した tool_result を削除: %s", tc_id)
-
-            else:
-                # 通常メッセージ: 未解決の tool_call があれば合成結果を先に挿入
-                if expected_tool_ids:
-                    for tc_id in sorted(expected_tool_ids):
-                        result.append({
+                    tc_id = tc.get("id", "")
+                    if tc_id and tc_id not in existing_result_ids:
+                        logger.debug("ツール結果が存在しない: %s → 合成結果を挿入", tc_id)
+                        inserts.append((idx, {
                             "role": "tool",
                             "tool_call_id": tc_id,
                             "content": "(中断されました)",
-                        })
-                    expected_tool_ids.clear()
-                result.append(msg)
+                        }))
 
-        # 末尾に未解決の tool_call が残っていたら合成エラーを追加
-        for tc_id in sorted(expected_tool_ids):
-            result.append({
-                "role": "tool",
-                "tool_call_id": tc_id,
-                "content": "(中断されました)",
-            })
+        # インデックスがずれないよう逆順に挿入
+        result = list(items)
+        for insert_idx, synthetic in reversed(inserts):
+            result.insert(insert_idx + 1, synthetic)
 
-        return result
+        # Pass 2: remove_orphan_outputs
+        # Pass 1 完了後のすべての tool_call ID を収集
+        call_ids: set[str] = {
+            tc.get("id", "")
+            for msg in result
+            if msg.get("role") == "assistant" and msg.get("tool_calls")
+            for tc in msg.get("tool_calls", [])
+        }
+
+        normalized: list[dict] = []
+        for msg in result:
+            if msg.get("role") == "tool":
+                tc_id = msg.get("tool_call_id", "")
+                if tc_id in call_ids:
+                    normalized.append(msg)
+                else:
+                    logger.debug("孤立した tool_result を削除: %s", tc_id)
+            else:
+                normalized.append(msg)
+
+        return normalized
 
 
 # 後方互換エイリアス
