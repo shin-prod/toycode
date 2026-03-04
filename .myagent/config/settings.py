@@ -50,6 +50,8 @@ class Settings:
         self.allow_shell_exec: bool = (
             os.getenv("ALLOW_SHELL_EXEC", "true").lower() == "true"
         )
+        # 承認ポリシー: "ask"=毎回確認 / "auto"=自動承認 / "never"=常に拒否
+        self.approval_policy: str = os.getenv("APPROVAL_POLICY", "ask").lower()
         self.allow_code_exec: bool = (
             os.getenv("ALLOW_CODE_EXEC", "true").lower() == "true"
         )

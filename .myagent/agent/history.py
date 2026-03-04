@@ -178,6 +178,73 @@ class ContextManager:
         )
         return True
 
+    # ---- コンパクト ----------------------------------------------------------
+
+    def compact(self, summary: str, keep_last_n_user_turns: int = 4) -> bool:
+        """LLM が生成した要約で会話履歴を圧縮する。
+
+        最新の keep_last_n_user_turns ユーザーターン以前の履歴を
+        summary で置き換える。system メッセージは常に保持する。
+
+        Args:
+            summary: LLM が生成した要約テキスト
+            keep_last_n_user_turns: 保持する最新のユーザーターン数
+
+        Returns:
+            圧縮を実行した場合 True、履歴が短すぎてスキップした場合 False
+        """
+        # system メッセージと non-system メッセージを分離
+        system_msgs = [m for m in self._items if m.get("role") == "system"]
+        non_system = [m for m in self._items if m.get("role") != "system"]
+
+        # non-system 内の user メッセージのインデックスを取得
+        user_indices = [
+            i for i, m in enumerate(non_system) if m.get("role") == "user"
+        ]
+
+        # user ターン数が keep_last_n_user_turns 以下なら圧縮不要
+        if len(user_indices) <= keep_last_n_user_turns:
+            return False
+
+        # 保持境界 = 後ろから keep_last_n_user_turns 番目の user メッセージのインデックス
+        boundary_idx = user_indices[-keep_last_n_user_turns]
+
+        # 要約メッセージを作成
+        summary_msg = {"role": "user", "content": f"[以前の会話の要約]\n{summary}"}
+
+        # 保持境界以降のアイテムを保持
+        items_from_boundary = non_system[boundary_idx:]
+
+        # 新しい履歴を構築
+        self._items = system_msgs + [summary_msg] + items_from_boundary
+
+        logger.debug(
+            "コンパクト完了: %d アイテムを要約で置換 (残り: %d アイテム)",
+            boundary_idx,
+            len(self._items),
+        )
+        return True
+
+    def compactable_item_count(self) -> int:
+        """compact 対象となる（要約される）アイテム数を返す。
+
+        keep_last_n_user_turns=4 として計算する。
+
+        Returns:
+            要約対象となる non-system アイテムの数
+        """
+        keep_last_n_user_turns = 4
+        non_system = [m for m in self._items if m.get("role") != "system"]
+        user_indices = [
+            i for i, m in enumerate(non_system) if m.get("role") == "user"
+        ]
+
+        if len(user_indices) <= keep_last_n_user_turns:
+            return 0
+
+        boundary_idx = user_indices[-keep_last_n_user_turns]
+        return boundary_idx
+
     # ---- 正規化 --------------------------------------------------------------
 
     @staticmethod

@@ -16,6 +16,7 @@ from tools import build_registry
 from agent import Agent
 from agent.stream import print_ai_header
 from utils.logger import get_logger
+from utils.spinner import Spinner
 from utils.status_bar import status_bar
 
 logger = get_logger(__name__)
@@ -159,6 +160,42 @@ def _maybe_inject_extra_prompts(
         logger.debug("システムプロンプトを更新しました (sections=%d)", len(system_content))
 
 
+def _read_input() -> str:
+    """複数行入力をサポートする入力関数。
+
+    行末が '\\' の場合は継続行として扱い、次の行を読み続ける。
+
+    Returns:
+        ユーザーの入力テキスト（結合・strip 済み）
+
+    Raises:
+        EOFError: EOF で入力が終了した場合
+        KeyboardInterrupt: Ctrl+C が押された場合
+    """
+    lines: list[str] = []
+    while True:
+        prompt_str = f"{_C_GREEN}>{_C_RESET} " if not lines else f"{_C_DIM}...{_C_RESET} "
+        line = input(prompt_str)
+        if line.endswith("\\"):
+            lines.append(line[:-1])
+        else:
+            lines.append(line)
+            break
+    return "\n".join(lines).strip()
+
+
+def _print_token_usage(history) -> None:
+    """トークン使用状況をディム表示する。
+
+    Args:
+        history: ContextManager インスタンス
+    """
+    used = history.estimate_tokens()
+    max_t = history.max_tokens
+    pct = used / max_t * 100
+    print(f"{_C_DIM}[トークン: {used:,} / {max_t:,} ({pct:.1f}%)]{_C_RESET}")
+
+
 def print_banner() -> None:
     """バナーを表示する（llama.cpp スタイル）。"""
     model = (
@@ -179,13 +216,15 @@ def print_banner() -> None:
     print(f"{dim}stream     :{reset}  {stream_label}")
     print(f"{dim}max loops  :{reset}  {settings.max_agent_loops}")
     print(f"{dim}workspace  :{reset}  {workspace_rel}")
+    print(f"{dim}approval   :{reset}  {settings.approval_policy}")
     print()
     print(f"{dim}available commands:{reset}")
-    print(f"  {dim}/help   {reset}  ヘルプを表示")
-    print(f"  {dim}/clear  {reset}  会話履歴をクリア")
-    print(f"  {dim}/tools  {reset}  登録済みツール一覧")
-    print(f"  {dim}/reload {reset}  コアプロンプトをリロード")
-    print(f"  {dim}/exit   {reset}  終了")
+    print(f"  {dim}/help    {reset}  ヘルプを表示")
+    print(f"  {dim}/clear   {reset}  会話履歴をクリア")
+    print(f"  {dim}/tools   {reset}  登録済みツール一覧")
+    print(f"  {dim}/compact {reset}  会話履歴を要約・圧縮")
+    print(f"  {dim}/reload  {reset}  コアプロンプトをリロード")
+    print(f"  {dim}/exit    {reset}  終了")
     print()
 
 
@@ -208,10 +247,12 @@ def handle_command(command: str, agent: "Agent") -> bool:
     if cmd == "/help":
         print(
             "\n利用可能なコマンド:\n"
-            "  /help   このヘルプを表示\n"
-            "  /clear  会話履歴をクリア\n"
-            "  /tools  登録済みツール一覧を表示\n"
-            "  /exit   ツールを終了\n"
+            "  /help     このヘルプを表示\n"
+            "  /clear    会話履歴をクリア\n"
+            "  /tools    登録済みツール一覧を表示\n"
+            "  /compact  会話履歴を要約・圧縮\n"
+            "  /reload   コアプロンプトをリロード\n"
+            "  /exit     ツールを終了\n"
         )
         return True
 
@@ -236,6 +277,66 @@ def handle_command(command: str, agent: "Agent") -> bool:
             print("coreprompt.md をリロードしました。")
         else:
             print("coreprompt.md が見つかりませんでした。")
+        return True
+
+    if cmd == "/compact":
+        count = agent.history.compactable_item_count()
+        if count == 0:
+            print("圧縮対象の履歴がありません（直近 4 ターン以下）。")
+            return True
+
+        # 要約対象アイテムを収集
+        all_msgs = agent.history.for_prompt()
+        non_system = [m for m in all_msgs if m.get("role") != "system"]
+        to_summarize = non_system[:count]
+
+        # 会話テキストを構築
+        parts: list[str] = []
+        for m in to_summarize:
+            role = m.get("role", "")
+            content = m.get("content") or ""
+            if role == "user" and content:
+                parts.append(f"ユーザー: {content[:500]}")
+            elif role == "assistant":
+                if content:
+                    parts.append(f"AI: {content[:500]}")
+                elif m.get("tool_calls"):
+                    names = [
+                        tc.get("function", {}).get("name", "?")
+                        for tc in m["tool_calls"]
+                    ]
+                    parts.append(f"AI: ツール呼び出し: {', '.join(names)}")
+            elif role == "tool" and content:
+                parts.append(f"ツール結果: {content[:200]}")
+
+        history_text = "\n".join(parts)
+        summary_prompt = (
+            "以下の会話履歴を簡潔に要約してください。"
+            "ユーザーの要求・AIのアクション・重要な決定事項を含めてください。\n\n"
+            f"{history_text}"
+        )
+
+        print(f"{_C_DIM}[ 要約を生成中... ({count} アイテム) ]{_C_RESET}")
+        try:
+            with Spinner("要約中"):
+                llm_resp = agent.llm.chat(
+                    [{"role": "user", "content": summary_prompt}]
+                )
+            summary = llm_resp.content or ""
+            if not summary:
+                print("要約の生成に失敗しました。")
+                return True
+            compacted = agent.history.compact(summary)
+            if compacted:
+                used = agent.history.estimate_tokens()
+                print(
+                    f"{_C_DIM}[ 履歴を圧縮しました"
+                    f" (残り: {used:,} トークン) ]{_C_RESET}"
+                )
+            else:
+                print("圧縮できませんでした。")
+        except Exception as e:
+            print(f"エラー: 要約生成失敗: {e}")
         return True
 
     print(f"不明なコマンド: {command}  (/help でヘルプを確認)")
@@ -281,11 +382,14 @@ def main() -> None:
         print()
         status_bar.set("待機中")
         try:
-            user_input = input(f"{_C_GREEN}>{_C_RESET} ").strip()
-        except (EOFError, KeyboardInterrupt):
+            user_input = _read_input()
+        except EOFError:
             status_bar.stop()
             print("\n終了します。")
             break
+        except KeyboardInterrupt:
+            print()
+            continue
 
         if not user_input:
             continue
@@ -313,10 +417,12 @@ def main() -> None:
                 # ストリーミング: print_stream が最終回答を表示済み
                 # ⚠ 警告（ループ上限）だけ別途表示する
                 print(f"{_C_ERR}{response}{_C_RESET}")
+            _print_token_usage(agent.history)
         except RuntimeError as e:
             print(f"\n\033[31mエラー: {e}\033[0m", file=sys.stderr)
             logger.error("エージェント実行エラー: %s", e)
         except KeyboardInterrupt:
+            agent.cancel_current_turn()
             print("\n(中断しました)")
 
 

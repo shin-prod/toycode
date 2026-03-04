@@ -194,6 +194,16 @@ class Agent:
         self.registry = registry
         self.history = ContextManager(max_tokens=settings.max_context_tokens)
         self.history.set_system(system_prompt or _SYSTEM_PROMPT)
+        self._current_turn_ctx: Optional[TurnContext] = None
+
+    def cancel_current_turn(self) -> None:
+        """実行中のターンをキャンセルする。
+
+        TurnContext の cancel_event をセットする。
+        run_turn() は次の is_cancelled() チェックで "(キャンセルされました)" を返す。
+        """
+        if self._current_turn_ctx is not None:
+            self._current_turn_ctx.cancel_event.set()
 
     def run(self, user_input: str) -> str:
         """ユーザー入力を受け取り、ターンを実行して最終回答を返す。
@@ -209,13 +219,17 @@ class Agent:
         """
         self.history.add("user", user_input)
         turn_ctx = TurnContext(max_loops=self._settings.max_agent_loops)
-        return run_turn(
-            llm=self.llm,
-            registry=self.registry,
-            context=self.history,
-            turn_ctx=turn_ctx,
-            stream=self._settings.stream,
-        )
+        self._current_turn_ctx = turn_ctx
+        try:
+            return run_turn(
+                llm=self.llm,
+                registry=self.registry,
+                context=self.history,
+                turn_ctx=turn_ctx,
+                stream=self._settings.stream,
+            )
+        finally:
+            self._current_turn_ctx = None
 
 
 # ---------------------------------------------------------------------------
