@@ -152,7 +152,10 @@ class BaseLLMClient(ABC):
                     except json.JSONDecodeError:
                         continue
 
-                    choice = chunk.get("choices", [{}])[0]
+                    choices = chunk.get("choices", [])
+                    if not choices:
+                        continue
+                    choice = choices[0]
                     delta = choice.get("delta", {})
                     finish_reason = choice.get("finish_reason") or finish_reason
 
