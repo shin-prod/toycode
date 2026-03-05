@@ -62,7 +62,7 @@ def print_stream(
             print("".join(accumulated))
         else:
             # モデルがテキストなしで完了した場合（ツール実行のみで応答なし）
-            print(f"{_C_RESULT}完了{_C_RESET}")
+            print(f"{_C_RESULT}done{_C_RESET}")
 
     return "".join(accumulated), finish_reason, tool_calls_data
 
@@ -118,7 +118,7 @@ def print_thinking_header(loop_count: int) -> None:
     Args:
         loop_count: 現在のループ回数（1始まり）
     """
-    print(f"\n{_C_TOOL}[ 思考 {loop_count} ]{_C_RESET}")
+    print(f"\n{_C_TOOL}[ thinking {loop_count} ]{_C_RESET}")
 
 
 def print_thinking_text(content: str) -> None:
@@ -165,7 +165,7 @@ def print_tool_result(tool_name: str, result: str, truncate: int = 200) -> None:
         truncate: 表示する最大文字数
     """
     display = result if len(result) <= truncate else result[:truncate] + "…"
-    is_error = result.startswith("エラー")
+    is_error = result.startswith(("エラー", "error:", "Error"))
     color = _C_ERR if is_error else _C_OK
     icon = "✗" if is_error else "✓"
     print(f"  {color}{icon}{_C_RESET}  {_C_RESULT}{display}{_C_RESET}", flush=True)
