@@ -243,8 +243,8 @@ def _call_chat(
     registry: ToolRegistry,
 ) -> LLMResponse:
     """非ストリーミングで LLM を呼び出す。呼び出し中はスピナーを表示する。"""
-    status_bar.set("思案中")
-    with Spinner("思考中"):
+    status_bar.set("thinking")
+    with Spinner("thinking"):
         return llm.chat(
             messages=context.for_prompt(),
             tools=registry.get_schemas(),
@@ -261,8 +261,8 @@ def _call_stream(
     Returns:
         (accumulated_text, finish_reason, tool_calls_data) のタプル
     """
-    status_bar.set("思案中")
-    spinner = Spinner("思案中").start()
+    status_bar.set("thinking")
+    spinner = Spinner("thinking").start()
     generator = llm.stream_chat(
         messages=context.for_prompt(),
         tools=registry.get_schemas(),
@@ -348,11 +348,11 @@ def _execute_tools(
     """
     results = []
     for tc in tool_calls:
-        status_bar.set("実行中")
+        status_bar.set("running")
         tool_log.append((tc.name, tc.arguments))
         print_tool_call(tc.name, tc.arguments)
         try:
-            with Spinner("作業中"):
+            with Spinner("running"):
                 result = registry.dispatch(tc.name, tc.arguments)
         except KeyError as e:
             result = f"エラー: 未登録のツール {e}"

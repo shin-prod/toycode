@@ -318,7 +318,7 @@ def handle_command(command: str, agent: "Agent") -> bool:
 
         print(f"{_C_DIM}[ 要約を生成中... ({count} アイテム) ]{_C_RESET}")
         try:
-            with Spinner("要約中"):
+            with Spinner("summarizing"):
                 llm_resp = agent.llm.chat(
                     [{"role": "user", "content": summary_prompt}]
                 )
@@ -380,7 +380,7 @@ def main() -> None:
     # REPL ループ
     while True:
         print()
-        status_bar.set("待機中")
+        status_bar.set("waiting")
         try:
             user_input = _read_input()
         except EOFError:
