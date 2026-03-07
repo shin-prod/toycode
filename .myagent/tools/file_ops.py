@@ -2,14 +2,13 @@
 
 read_file / write_file / edit_file / list_directory / search_files を提供する。
 
-書き込み系操作（write_file / edit_file）は WORKSPACE_DIR 以下に制限される。
-読み取り系操作（read_file / list_directory / search_files）は制限なし。
+全操作（読み取り・書き込み）は WORKSPACE_DIR 以下に制限される。
 """
 
 import os
 import re
 
-from utils.file_guard import check_write_allowed, resolve_path
+from utils.file_guard import check_path_allowed, check_write_allowed, resolve_path
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -18,7 +17,7 @@ _MAX_SEARCH_RESULTS = 200
 
 
 def read_file(path: str) -> str:
-    """ファイルの内容を読み込む。
+    """ファイルの内容を読み込む。WORKSPACE_DIR 外は拒否される。
 
     Args:
         path: 読み込むファイルのパス
@@ -27,6 +26,8 @@ def read_file(path: str) -> str:
         ファイルの内容。ファイルが存在しない場合はエラーメッセージ。
     """
     resolved = resolve_path(path)
+    if err := check_path_allowed(resolved):
+        return err
     logger.debug("read_file: %s", resolved)
     if not os.path.exists(resolved):
         return f"エラー: ファイルが存在しません: {resolved}"
@@ -100,7 +101,7 @@ def edit_file(path: str, old_string: str, new_string: str) -> str:
 
 
 def list_directory(path: str) -> str:
-    """ディレクトリの一覧を取得する。
+    """ディレクトリの一覧を取得する。WORKSPACE_DIR 外は拒否される。
 
     Args:
         path: 一覧を取得するディレクトリのパス
@@ -109,6 +110,8 @@ def list_directory(path: str) -> str:
         ファイル・ディレクトリ一覧の文字列
     """
     resolved = resolve_path(path)
+    if err := check_path_allowed(resolved):
+        return err
     logger.debug("list_directory: %s", resolved)
     if not os.path.exists(resolved):
         return f"エラー: パスが存在しません: {resolved}"
@@ -128,7 +131,7 @@ def list_directory(path: str) -> str:
 
 
 def search_files(pattern: str, path: str) -> str:
-    """ファイル内容をパターン検索する（grep 相当）。
+    """ファイル内容をパターン検索する（grep 相当）。WORKSPACE_DIR 外は拒否される。
 
     Args:
         pattern: 検索する正規表現パターン
@@ -138,6 +141,8 @@ def search_files(pattern: str, path: str) -> str:
         マッチした行の一覧（ファイル名:行番号:内容 形式）
     """
     resolved = resolve_path(path)
+    if err := check_path_allowed(resolved):
+        return err
     logger.debug("search_files: pattern=%s path=%s", pattern, resolved)
     try:
         compiled = re.compile(pattern)

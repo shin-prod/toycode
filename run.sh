@@ -11,9 +11,9 @@ AI_DIR="$(grep -E '^AI_DIR=' .env 2>/dev/null | head -1 | cut -d'=' -f2 | tr -d 
 AI_DIR="${AI_DIR:-.myagent}"
 VENV_DIR="${AI_DIR}/venv"
 
-# WORKSPACE_DIR を .env から取得（デフォルト: カレントディレクトリ）
+# WORKSPACE_DIR を .env から取得（デフォルト: このスクリプトがあるフォルダ）
 WORKSPACE_DIR="$(grep -E '^WORKSPACE_DIR=' .env 2>/dev/null | head -1 | cut -d'=' -f2 | tr -d '"' | tr -d "'")"
-WORKSPACE_DIR="${WORKSPACE_DIR:-.}"
+WORKSPACE_DIR="${WORKSPACE_DIR:-$SCRIPT_DIR}"
 
 # WORKSPACE_DIR の存在確認
 if [ ! -d "$WORKSPACE_DIR" ]; then
