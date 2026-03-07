@@ -10,6 +10,7 @@ logger = get_logger(__name__)
 
 # ANSI カラー定数
 _C_AI = "\033[36m"         # AI ヘッダー（シアン）
+_C_THINK = "\033[2;3m"     # 中間思考テキスト（暗い・イタリック）
 _C_TOOL = "\033[2m"        # ツール名（暗い）
 _C_RESULT = "\033[2m"      # ツール結果（暗い）
 _C_OK = "\033[32m"         # 成功（緑）
@@ -55,8 +56,13 @@ def print_stream(
     if spinner:
         spinner.stop()
 
-    # 最終回答のときだけテキストを表示
-    if finish_reason != "tool_calls":
+    if finish_reason == "tool_calls":
+        # ツール呼び出し前の中間思考テキストを別色（暗い・イタリック）で表示
+        text = "".join(accumulated).strip()
+        if text:
+            print(f"\n{_C_THINK}▸ {text}{_C_RESET}")
+    else:
+        # 最終回答
         print_ai_header()
         if accumulated:
             print("".join(accumulated))
@@ -127,8 +133,9 @@ def print_thinking_text(content: str) -> None:
     Args:
         content: ツール呼び出しを決める前にAIが出力したテキスト
     """
-    print(f"\n{_C_AI}>{_C_RESET}")
-    print(content)
+    text = content.strip()
+    if text:
+        print(f"\n{_C_THINK}▸ {text}{_C_RESET}")
 
 
 def _fmt_arg(val: object) -> str:
